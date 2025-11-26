@@ -9,7 +9,6 @@ from streamlit_drawable_canvas import st_canvas
 from PIL import Image
 import subprocess
 import pandas as pd
-import altair as alt # <--- Thư viện biểu đồ nâng cao
 
 # Cấu hình trang Streamlit
 st.set_page_config(
@@ -29,17 +28,6 @@ st.markdown("""
     .tracker-info { padding: 10px; background-color: #e3f2fd; color: #0d47a1; border-radius: 5px; margin-bottom: 10px; font-size: 0.9em; }
 </style>
 """, unsafe_allow_html=True)
-
-CUSTOM_HEX_COLORS = [
-    '#00FF00', # Class 0 (Xanh lá)
-    '#0099FF', # Class 1 (Xanh dương)
-    '#FF3333', # Class 2 (Đỏ)
-    '#FFFF00', # Class 3 (Vàng)
-    '#9933FF', # Class 4 (Tím)
-    '#FF6600', # Class 5 (Cam)
-    '#33FFFF', # Class 6 (Cyan)
-    '#FF33CC'  # Class 7 (Hồng)
-]
 
 # Hàm chuyển đổi video sang H.264 để tương thích web
 def convert_video_to_h264(input_path):
@@ -70,47 +58,16 @@ def process_video(video_path, model, zone_polygon, tracker_type):
         triggering_anchors=(sv.Position.CENTER,) # RẤT QUAN TRỌNG: Chỉ dùng tâm hộp để tránh đếm sai lệch
     )
     
-    # # Annotators: Vẽ hộp, nhãn, vùng
-    
-    # Tạo bảng màu riêng. Hex code: [Xanh Lá, Xanh Dương, Đỏ, Vàng, Tím, ...]
-    # Supervision sẽ tự xoay vòng màu này cho các class ID (0, 1, 2...)
-    custom_colors = sv.ColorPalette.from_hex(['#00FF00', '#0099FF', '#FF3333', '#FFFF00', '#9933FF', '#FF6600', '#33FFFF', '#FF33CC'])
-    
-    custom_palette = sv.ColorPalette.from_hex(CUSTOM_HEX_COLORS)
-    
-    # Box Annotator (Viền khung xe)
-    box_annotator = sv.BoxAnnotator(
-        thickness=2,
-        color=custom_palette # <--- Áp dụng màu tùy chỉnh
-    )
-    
-    # Label Annotator (Nhãn tên xe)
-    label_annotator = sv.LabelAnnotator(
-        text_scale=0.5, 
-        text_thickness=1, 
-        text_padding=5,
-        color=custom_palette # <--- Áp dụng màu cùng tông với Box
-    )
-    
+    # Annotators: Vẽ hộp, nhãn, vùng
+    box_annotator = sv.BoxAnnotator(thickness=2)
+    label_annotator = sv.LabelAnnotator(text_scale=0.5, text_thickness=1, text_padding=5)
     zone_annotator = sv.PolygonZoneAnnotator(
         zone=zone, 
         color=sv.Color.RED, 
-        thickness=3,         # Độ dày viền vùng
+        thickness=2, 
         text_thickness=2, 
-        text_scale=0         # Chỉnh thành 0 để ẩn số đếm giữa khung
+        text_scale=1
     )
-    
-    ## Đoạn này code cũ, giữ lại để tham khảo
-    # # Annotators: Vẽ hộp, nhãn, vùng
-    # box_annotator = sv.BoxAnnotator(thickness=2)
-    # label_annotator = sv.LabelAnnotator(text_scale=0.5, text_thickness=1, text_padding=5)
-    # zone_annotator = sv.PolygonZoneAnnotator(
-    #     zone=zone, 
-    #     color=sv.Color.RED, 
-    #     thickness=2, 
-    #     text_thickness=2, 
-    #     text_scale=0 # Chỉnh thành 0 để ẩn số nằm giữa khung
-    # )
 
     # Video Writer để lưu video kết quả
     tfile = tempfile.NamedTemporaryFile(delete=False, suffix='.mp4')
@@ -280,7 +237,7 @@ def main():
                     with col2:
                         st.markdown(f"### 📊 Thống kê ({tracker_type})")
                         if stats:
-                            df = pd.DataFrame(list(stats.items()), columns=['Loại xe', 'Số lượng'])
+                            df = pd.DataFrame(list(stats.items()), columns=['Loại', 'Số lượng'])
                             total_vehicles = sum(stats.values())
                             st.markdown(f"""
                             <div class="stat-box">
@@ -290,39 +247,7 @@ def main():
                             <br>
                             """, unsafe_allow_html=True)
                             
-                            # Lấy danh sách tên class theo đúng thứ tự ID (0, 1, 2...)
-                            # Để đảm bảo màu Index 0 của Chart khớp màu Index 0 của Video
-                            sorted_class_ids = sorted(model.names.keys())
-                            domain_names = [model.names[i] for i in sorted_class_ids]
-                            
-                            # Lấy bảng màu tùy chỉnh, điều chỉnh độ dài cho phù hợp
-                            chart_colors = CUSTOM_HEX_COLORS
-                            if len(domain_names) > len(chart_colors):
-                                chart_colors = (chart_colors * (len(domain_names) // len(chart_colors) + 1))[:len(domain_names)]
-                            elif len(domain_names) < len(chart_colors):
-                                chart_colors = chart_colors[:len(domain_names)]
-                            
-                            chart = alt.Chart(df).mark_bar().encode(
-                                x=alt.X('Loại xe', axis=alt.Axis(title='Loại phương tiện')),
-                                y=alt.Y('Số lượng', axis=alt.Axis(title='Số lượng xe')),
-                                # Ép buộc màu sắc theo mapping
-                                color=alt.Color('Loại xe', 
-                                                scale=alt.Scale(domain=domain_names, range=chart_colors),
-                                                legend=None),
-                                tooltip=['Loại xe', 'Số lượng']
-                            ).properties(height=400)
-                            
-                            st.altair_chart(chart, use_container_width=True)
-                            
-                            # # st.bar_chart(df.set_index('Loại'), color="#d32f2f")
-                            # chart = alt.Chart(df).mark_bar().encode(
-                            #     x='Loại xe',
-                            #     y='Số lượng',
-                            #     color='Loại xe',  # Màu sắc khác nhau
-                            #     tooltip=['Loại xe', 'Số lượng'] # Hiện số khi hover
-                            # )
-                            # st.altair_chart(chart, use_container_width=True)
-
+                            st.bar_chart(df.set_index('Loại'), color="#d32f2f")
                             st.dataframe(df, hide_index=True, use_container_width=True)
                         else:
                             st.warning("Chưa có phương tiện nào đi vào vùng.")
