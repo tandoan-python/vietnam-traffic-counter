@@ -196,23 +196,15 @@ def main():
         zone_polygon = None
         if ret:
             frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-            
-            # sử dụng cho local - không cần resize ảnh nền
             pil_img = Image.fromarray(frame)
             bg_w, bg_h = pil_img.size
-            
-            # Tính toán kích thước hiển thị
             canvas_w = 700
             canvas_h = int(bg_h * (canvas_w / bg_w))
-            
-            # RESIZE ẢNH TRƯỚC KHI ĐƯA VÀO CANVAS
-            # Giúp ảnh nhẹ hơn, hiển thị ngay lập tức trên Cloud streamlit
-            pil_img_resized = pil_img.resize((canvas_w, canvas_h)) 
 
             canvas = st_canvas(
                 fill_color="rgba(255, 0, 0, 0.3)",
                 stroke_width=2, stroke_color="#ff0000",
-                background_image=pil_img_resized, # local sử dụng pil_img
+                background_image=pil_img,
                 height=canvas_h, width=canvas_w,
                 drawing_mode="polygon",
                 key="canvas",
@@ -221,25 +213,9 @@ def main():
             if canvas.json_data and canvas.json_data["objects"]:
                 raw_points = canvas.json_data["objects"][-1]["path"]
                 if len(raw_points) > 2:
-                    ## đoạn này dành cho chạy local - không cần resize ảnh nền
-                    # scale_x = bg_w / canvas_w
-                    # scale_y = bg_h / canvas_h
-                    # pts = [[int(p[1]*scale_x), int(p[2]*scale_y)] for p in raw_points if len(p)>=3]
-                    
-                    # Vì ảnh nền đã resize, ta không cần scale_x/y phức tạp nữa
-                    # Tọa độ vẽ trên canvas lúc này chính là tỷ lệ của ảnh (vì ảnh = canvas)
-                    # Tuy nhiên, cần scale về kích thước GỐC của video để logic đếm chạy đúng
-                    scale_x_restore = bg_w / canvas_w
-                    scale_y_restore = bg_h / canvas_h
-                    
-                    pts = []
-                    for p in raw_points:
-                        if len(p) >= 3:
-                            real_x = int(p[1] * scale_x_restore)
-                            real_y = int(p[2] * scale_y_restore)
-                            pts.append([real_x, real_y])
-                    
-                    
+                    scale_x = bg_w / canvas_w
+                    scale_y = bg_h / canvas_h
+                    pts = [[int(p[1]*scale_x), int(p[2]*scale_y)] for p in raw_points if len(p)>=3]
                     zone_polygon = np.array(pts)
                     st.success("✅ Đã xác định vùng đếm!")
 
